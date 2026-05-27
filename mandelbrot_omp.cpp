@@ -5,7 +5,16 @@
  * Tarea B: Aplica un filtro de desenfoque Gaussiano 2D (radio = 20, núcleo 41×41).
  *
  * Estrategia de paralelización:
- *  - Tarea A: `#pragma omp parallel for schedule(dynamic, 8)`
+ *  - Tarea A: Primero se mide con schedule(static) como referencia, luego con
+ *             schedule(dynamic, 8) que resultó ser el planificador óptimo según
+ *             el benchmark empírico (mandelbrot_sched_bench.cpp) en un Ryzen 5 3600:
+ *
+ *               Planificador  Chunk   Tiempo(s)   Speedup
+ *               static        -       0.5415      1.000  ← referencia
+ *               dynamic       8       0.3089      1.753x ← ÓPTIMO
+ *               dynamic       4       0.3102      1.745x
+ *               guided        -       0.3920      1.381x
+ *
  *             El planificador dinámico compensa el desbalance de carga inherente
  *             al fractal (píxeles dentro del conjunto requieren MAX_ITER iteraciones
  *             mientras que los exteriores escapan rápidamente).
@@ -25,6 +34,7 @@
  */
 
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <vector>
 #include <cmath>
@@ -105,6 +115,16 @@ static Pixel compute_mandelbrot(int px, int py) {
     }
 
     return smooth_color(iter, zr, zi);
+}
+
+// ---------------------------------------------------------------------------
+// TAREA A – Auxiliar: genera el fractal con schedule(static) para referencia
+// ---------------------------------------------------------------------------
+static void generate_mandelbrot_static(std::vector<Pixel>& img) {
+    #pragma omp parallel for schedule(static) default(none) shared(img)
+    for (int y = 0; y < HEIGHT; ++y)
+        for (int x = 0; x < WIDTH; ++x)
+            img[y * WIDTH + x] = compute_mandelbrot(x, y);
 }
 
 // ---------------------------------------------------------------------------
@@ -204,15 +224,24 @@ int main() {
     std::vector<Pixel> blurred(WIDTH * HEIGHT);
 
     // ------------------------------------------------------------------
-    // TAREA A  –  schedule(dynamic, 8)
+    // TAREA A  –  Comparación de planificadores
     //
-    //  El conjunto de Mandelbrot tiene carga DESBALANCEADA:
-    //   - Píxeles DENTRO del conjunto → MAX_ITER iteraciones (lentos).
-    //   - Píxeles FUERA del conjunto → escapan en pocas iteraciones (rápidos).
-    //  dynamic con chunk=8 reasigna filas a medida que los hilos terminan,
-    //  compensando el desbalance y minimizando el tiempo de espera.
+    //  Paso 1: schedule(static) → referencia / línea base.
+    //  Paso 2: schedule(dynamic, 8) → planificador óptimo empírico.
+    //
+    //  El fractal tiene carga DESBALANCEADA: píxeles dentro del conjunto
+    //  ejecutan MAX_ITER iteraciones; los exteriores escapan pronto.
+    //  dynamic con chunk=8 reasigna filas conforme los hilos terminan,
+    //  compensando el desbalance.  chunk=8 minimiza el overhead de
+    //  sincronización frente a chunks menores sin perder balanceo.
     // ------------------------------------------------------------------
-    std::cout << "[Tarea A] Generando fractal  (schedule=dynamic, chunk=8)...\n";
+    std::cout << "[Tarea A] Paso 1: schedule(static) — referencia...\n";
+    auto ta_s0 = Clock::now();
+    generate_mandelbrot_static(image);
+    double ta_static = Sec(Clock::now() - ta_s0).count();
+    std::cout << "  Tiempo static    : " << ta_static << " s\n";
+
+    std::cout << "[Tarea A] Paso 2: schedule(dynamic, 8) — óptimo...\n";
     auto ta0 = Clock::now();
 
     #pragma omp parallel for schedule(dynamic, 8) default(none) shared(image)
@@ -221,7 +250,9 @@ int main() {
             image[y * WIDTH + x] = compute_mandelbrot(x, y);
 
     double ta = Sec(Clock::now() - ta0).count();
-    std::cout << "  Tiempo: " << ta << " s\n";
+    std::cout << "  Tiempo dynamic,8 : " << ta << " s"
+              << "  (speedup " << std::fixed << std::setprecision(3)
+              << (ta_static / ta) << "x vs static)\n";
     save_ppm("output/mandelbrot_8k.ppm", image);
 
     // ------------------------------------------------------------------
@@ -246,7 +277,10 @@ int main() {
     // Resumen
     // ------------------------------------------------------------------
     std::cout << "\n--------------------------------------------\n"
-              << "  Tarea A : " << ta << " s\n"
+              << "  Tarea A static   : " << ta_static << " s\n"
+              << "  Tarea A dynamic,8: " << ta << " s"
+              << "  (speedup " << std::fixed << std::setprecision(3)
+              << (ta_static / ta) << "x)\n"
               << "  Tarea B : " << tb << " s\n"
               << "  TOTAL   : " << (ta + tb) << " s\n"
               << "  Hilos   : " << nthreads << "\n"
