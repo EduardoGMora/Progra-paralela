@@ -77,74 +77,18 @@ static void kern_static(std::vector<Pixel>& img) {
 }
 
 // --- dynamic ---
-static void kern_dyn_1(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(dynamic,1) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_dyn_2(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(dynamic,2) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_dyn_4(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(dynamic,4) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_dyn_8(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(dynamic,8) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_dyn_16(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(dynamic,16) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_dyn_32(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(dynamic,32) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_dyn_64(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(dynamic,64) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_dyn_128(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(dynamic,128) default(none) shared(img)
+static void kern_dyn(std::vector<Pixel>& img, int chunk=1) {
+    #pragma omp parallel for schedule(dynamic,chunk) default(none) shared(img) firstprivate(chunk)
     for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
 }
 
 // --- guided ---
-static void kern_guid_def(std::vector<Pixel>& img) {
+static void kern_guid_def(std::vector<Pixel>& img, int /*chunk*/) {
     #pragma omp parallel for schedule(guided) default(none) shared(img)
     for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
 }
-static void kern_guid_1(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(guided,1) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_guid_2(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(guided,2) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_guid_4(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(guided,4) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_guid_8(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(guided,8) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_guid_16(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(guided,16) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_guid_32(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(guided,32) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_guid_64(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(guided,64) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
-}
-static void kern_guid_128(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(guided,128) default(none) shared(img)
+static void kern_guid(std::vector<Pixel>& img, int chunk=1) {
+    #pragma omp parallel for schedule(guided,chunk) default(none) shared(img) firstprivate(chunk)
     for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
 }
 
@@ -195,27 +139,27 @@ int main() {
     struct Config {
         const char* name;
         int         chunk;   // 0 = default
-        void (*fn)(std::vector<Pixel>&);
+        void (*fn)(std::vector<Pixel>&, int);
     };
 
     Config configs[] = {
-        {"dynamic",   1,   kern_dyn_1  },
-        {"dynamic",   2,   kern_dyn_2  },
-        {"dynamic",   4,   kern_dyn_4  },
-        {"dynamic",   8,   kern_dyn_8  },
-        {"dynamic",   16,  kern_dyn_16 },
-        {"dynamic",   32,  kern_dyn_32 },
-        {"dynamic",   64,  kern_dyn_64 },
-        {"dynamic",   128, kern_dyn_128},
-        {"guided",    0,   kern_guid_def},
-        {"guided",    1,   kern_guid_1 },
-        {"guided",    2,   kern_guid_2 },
-        {"guided",    4,   kern_guid_4 },
-        {"guided",    8,   kern_guid_8 },
-        {"guided",    16,  kern_guid_16},
-        {"guided",    32,  kern_guid_32},
-        {"guided",    64,  kern_guid_64},
-        {"guided",    128, kern_guid_128},
+        {"dynamic",   1,   kern_dyn },
+        {"dynamic",   2,   kern_dyn },
+        {"dynamic",   4,   kern_dyn },
+        {"dynamic",   8,   kern_dyn },
+        {"dynamic",   16,  kern_dyn },
+        {"dynamic",   32,  kern_dyn },
+        {"dynamic",   64,  kern_dyn },
+        {"dynamic",   128, kern_dyn },
+        {"guided",    0,   kern_guid_def },
+        {"guided",    1,   kern_guid },
+        {"guided",    2,   kern_guid },
+        {"guided",    4,   kern_guid },
+        {"guided",    8,   kern_guid },
+        {"guided",    16,  kern_guid },
+        {"guided",    32,  kern_guid },
+        {"guided",    64,  kern_guid },
+        {"guided",    128, kern_guid },
     };
 
     double      best_t     = t_ref;
@@ -223,7 +167,7 @@ int main() {
     int         best_chunk = -1;
 
     for (auto& c : configs) {
-        double t       = bench([&]{ c.fn(img); });
+        double t       = bench([&]{ c.fn(img, c.chunk); });
         double speedup = t_ref / t;
 
         std::string chunk_str = (c.chunk == 0) ? "-" : std::to_string(c.chunk);
