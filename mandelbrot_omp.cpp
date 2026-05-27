@@ -14,14 +14,14 @@
  *             (2r+1)² multiplicaciones), por lo que static es óptimo.
  *
  * Compilar:
- *   g++ -O2 -fopenmp -std=c++17 -o mandelbrot_omp mandelbrot_omp.cpp
+ *   g++ -O2 -fopenmp -std=c++17 -o bin/mandelbrot_omp mandelbrot_omp.cpp
  *
  * Ejecutar con N hilos:
- *   OMP_NUM_THREADS=N ./mandelbrot_omp
+ *   OMP_NUM_THREADS=N ./bin/mandelbrot_omp
  *
- * Salida:
- *   mandelbrot_8k.ppm          (fractal sin filtro)
- *   mandelbrot_8k_blurred.ppm  (fractal con Gaussiano)
+ * Salida (carpeta output/):
+ *   output/mandelbrot_8k.ppm          (fractal sin filtro)
+ *   output/mandelbrot_8k_blurred.ppm  (fractal con Gaussiano)
  */
 
 #include <iostream>
@@ -222,7 +222,7 @@ int main() {
 
     double ta = Sec(Clock::now() - ta0).count();
     std::cout << "  Tiempo: " << ta << " s\n";
-    save_ppm("mandelbrot_8k.ppm", image);
+    save_ppm("output/mandelbrot_8k.ppm", image);
 
     // ------------------------------------------------------------------
     // TAREA B  –  schedule(static)
@@ -240,7 +240,7 @@ int main() {
     double tb = Sec(Clock::now() - tb0).count();
 
     std::cout << "  Tiempo: " << tb << " s\n";
-    save_ppm("mandelbrot_8k_blurred.ppm", blurred);
+    save_ppm("output/mandelbrot_8k_blurred.ppm", blurred);
 
     // ------------------------------------------------------------------
     // Resumen

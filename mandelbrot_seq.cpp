@@ -5,11 +5,11 @@
  * Tarea B: Aplica un filtro de desenfoque Gaussiano 2D (radio = 20, núcleo 41×41).
  *
  * Compilar:
- *   g++ -O2 -std=c++17 -o mandelbrot_seq mandelbrot_seq.cpp
+ *   g++ -O2 -std=c++17 -o bin/mandelbrot_seq mandelbrot_seq.cpp
  *
- * Salida:
- *   mandelbrot_8k.ppm          (fractal sin filtro)
- *   mandelbrot_8k_blurred.ppm  (fractal con Gaussiano)
+ * Salida (carpeta output/):
+ *   output/mandelbrot_8k.ppm          (fractal sin filtro)
+ *   output/mandelbrot_8k_blurred.ppm  (fractal con Gaussiano)
  */
 
 #include <iostream>
@@ -204,7 +204,7 @@ int main() {
 
     double ta = Sec(Clock::now() - ta0).count();
     std::cout << "  Tiempo: " << ta << " s\n";
-    save_ppm("mandelbrot_8k.ppm", image);
+    save_ppm("output/mandelbrot_8k.ppm", image);
 
     // ------------------------------------------------------------------
     // TAREA B
@@ -217,7 +217,7 @@ int main() {
     double tb = Sec(Clock::now() - tb0).count();
 
     std::cout << "  Tiempo: " << tb << " s\n";
-    save_ppm("mandelbrot_8k_blurred.ppm", blurred);
+    save_ppm("output/mandelbrot_8k_blurred.ppm", blurred);
 
     // ------------------------------------------------------------------
     // Resumen
