@@ -15,6 +15,7 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
+#include <filesystem>
 #include "Mandelbrot.hpp"
 #include "ImageIO.hpp"
 
@@ -42,6 +43,8 @@ int main() {
               << "  Max iter    : " << MAX_ITER << "\n"
               << "  Radio Gauss : " << GAUSS_RADIUS
               << "  (núcleo " << 2*GAUSS_RADIUS+1 << "x" << 2*GAUSS_RADIUS+1 << ")\n\n";
+
+    std::filesystem::create_directories("output");
 
     std::vector<Pixel> image(WIDTH * HEIGHT);
     std::vector<Pixel> blurred(WIDTH * HEIGHT);

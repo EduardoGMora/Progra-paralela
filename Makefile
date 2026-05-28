@@ -36,11 +36,11 @@ $(SEQ_BIN): $(SEQ_SRC) Mandelbrot.hpp ImageIO.hpp ColorPallete.hpp
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
-$(OMP_BIN): $(OMP_SRC) Mandelbrot.hpp ImageIO.hpp
+$(OMP_BIN): $(OMP_SRC) Mandelbrot.hpp ImageIO.hpp ColorPallete.hpp
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $(OMPFLAGS) -o $@ $<
 
-$(BENCH_BIN): $(BENCH_SRC) Mandelbrot.hpp
+$(BENCH_BIN): $(BENCH_SRC) Mandelbrot.hpp ColorPallete.hpp
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $(OMPFLAGS) -o $@ $<
 
