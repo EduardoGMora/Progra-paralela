@@ -13,5 +13,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: make
+    - name: Build
       run: make all
+    - name: Clean up
+      run: make clean
+    
