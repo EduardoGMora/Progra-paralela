@@ -17,79 +17,44 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
-#include <cmath>
 #include <chrono>
-#include <cstdint>
-#include <algorithm>
 #include <string>
 #include <limits>
 #include <omp.h>
+#include "Mandelbrot.hpp"
 
-static constexpr int    W        = 3840;
-static constexpr int    H        = 2160;
-static constexpr int    MAX_ITER = 512;
-static constexpr double X_MIN    = -2.5;
-static constexpr double X_MAX    =  1.0;
-static constexpr double Y_MIN    = -1.25;
-static constexpr double Y_MAX    =  1.25;
-static constexpr int    RUNS     = 3;
+static constexpr int W        = 3840;
+static constexpr int H        = 2160;
+static constexpr int MAX_ITER = 512;
+static constexpr int RUNS     = 3;
 
-struct Pixel { uint8_t r, g, b; };
-
-static Pixel smooth_color(int iter, double zr, double zi) {
-    if (iter == MAX_ITER) return {0, 0, 0};
-    double log_zn = std::log(zr * zr + zi * zi) * 0.5;
-    double nu     = std::log(log_zn / std::log(2.0)) / std::log(2.0);
-    double t      = std::max(0.0, std::min(1.0, (iter + 1 - nu) / MAX_ITER));
-    auto lerp = [](double a, double b, double x){ return a + (b - a) * x; };
-    double r, g, b;
-    if      (t < 0.16)   { double s = t / 0.16;           r=lerp(0,32,s);  g=lerp(7,107,s);   b=lerp(100,203,s); }
-    else if (t < 0.42)   { double s = (t-0.16)/0.26;      r=lerp(32,237,s);g=lerp(107,255,s); b=lerp(203,255,s); }
-    else if (t < 0.6425) { double s = (t-0.42)/0.2225;    r=lerp(237,255,s);g=lerp(255,170,s);b=lerp(255,0,s);   }
-    else if (t < 0.8575) { double s = (t-0.6425)/0.215;   r=lerp(255,0,s); g=lerp(170,2,s);   b=lerp(0,0,s);     }
-    else                 { double s = (t-0.8575)/0.1425;   r=lerp(0,0,s);   g=lerp(2,7,s);     b=lerp(0,100,s);   }
-    return { (uint8_t)r, (uint8_t)g, (uint8_t)b };
-}
-
-static inline Pixel compute_mandelbrot(int px, int py) {
-    double cr = X_MIN + (X_MAX - X_MIN) * px / (W - 1);
-    double ci = Y_MIN + (Y_MAX - Y_MIN) * py / (H - 1);
-    double zr = 0.0, zi = 0.0;
-    int iter = 0;
-    while (iter < MAX_ITER && (zr*zr + zi*zi) <= 4.0) {
-        double tmp = zr*zr - zi*zi + cr;
-        zi = 2.0*zr*zi + ci;
-        zr = tmp;
-        ++iter;
-    }
-    return smooth_color(iter, zr, zi);
-}
+static const Mandelbrot mb(W, H, MAX_ITER);
 
 // ---------------------------------------------------------------------------
 // Kernels con planificador fijo en tiempo de compilación
 // ---------------------------------------------------------------------------
 
 static void kern_static(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(static) default(none) shared(img)
+    #pragma omp parallel for schedule(static) default(none) shared(img, mb)
     for (int y = 0; y < H; ++y)
         for (int x = 0; x < W; ++x)
-            img[y*W+x] = compute_mandelbrot(x, y);
+            img[y*W+x] = mb.compute(x, y);
 }
 
 // --- dynamic ---
 static void kern_dyn(std::vector<Pixel>& img, int chunk=1) {
-    #pragma omp parallel for schedule(dynamic,chunk) default(none) shared(img) firstprivate(chunk)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
+    #pragma omp parallel for schedule(dynamic,chunk) default(none) shared(img, mb) firstprivate(chunk)
+    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = mb.compute(x,y);
 }
 
 // --- guided ---
 static void kern_guid_def(std::vector<Pixel>& img, int /*chunk*/) {
-    #pragma omp parallel for schedule(guided) default(none) shared(img)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
+    #pragma omp parallel for schedule(guided) default(none) shared(img, mb)
+    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = mb.compute(x,y);
 }
 static void kern_guid(std::vector<Pixel>& img, int chunk=1) {
-    #pragma omp parallel for schedule(guided,chunk) default(none) shared(img) firstprivate(chunk)
-    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = compute_mandelbrot(x,y);
+    #pragma omp parallel for schedule(guided,chunk) default(none) shared(img, mb) firstprivate(chunk)
+    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) img[y*W+x] = mb.compute(x,y);
 }
 
 // ---------------------------------------------------------------------------

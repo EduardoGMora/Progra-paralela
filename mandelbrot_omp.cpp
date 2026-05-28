@@ -35,13 +35,13 @@
 
 #include <iostream>
 #include <iomanip>
-#include <fstream>
 #include <vector>
 #include <cmath>
 #include <chrono>
-#include <cstdint>
 #include <algorithm>
 #include <omp.h>
+#include "Mandelbrot.hpp"
+#include "ImageIO.hpp"
 
 // ---------------------------------------------------------------------------
 // Parámetros globales  (idénticos a la versión secuencial)
@@ -49,102 +49,18 @@
 static constexpr int    WIDTH        = 7680;
 static constexpr int    HEIGHT       = 4320;
 static constexpr int    MAX_ITER     = 1024;
-static constexpr double X_MIN        = -2.5;
-static constexpr double X_MAX        =  1.0;
-static constexpr double Y_MIN        = -1.25;
-static constexpr double Y_MAX        =  1.25;
 static constexpr int    GAUSS_RADIUS = 20;   // núcleo 41×41
 
-// ---------------------------------------------------------------------------
-// Tipos
-// ---------------------------------------------------------------------------
-struct Pixel { uint8_t r, g, b; };
-
-// ---------------------------------------------------------------------------
-// Paleta de color suave para Mandelbrot
-// ---------------------------------------------------------------------------
-static Pixel smooth_color(int iter, double zr, double zi) {
-    if (iter == MAX_ITER) return {0, 0, 0};
-
-    double log_zn = std::log(zr * zr + zi * zi) * 0.5;
-    double nu     = std::log(log_zn / std::log(2.0)) / std::log(2.0);
-    double t      = (iter + 1 - nu) / MAX_ITER;
-    t = std::max(0.0, std::min(1.0, t));
-
-    auto lerp = [](double a, double b, double x) { return a + (b - a) * x; };
-
-    double r, g, b;
-    if (t < 0.16) {
-        double s = t / 0.16;
-        r = lerp(0,   32,  s);  g = lerp(7,   107, s);  b = lerp(100, 203, s);
-    } else if (t < 0.42) {
-        double s = (t - 0.16) / 0.26;
-        r = lerp(32,  237, s);  g = lerp(107, 255, s);  b = lerp(203, 255, s);
-    } else if (t < 0.6425) {
-        double s = (t - 0.42) / 0.2225;
-        r = lerp(237, 255, s);  g = lerp(255, 170, s);  b = lerp(255, 0,   s);
-    } else if (t < 0.8575) {
-        double s = (t - 0.6425) / 0.215;
-        r = lerp(255, 0,   s);  g = lerp(170, 2,   s);  b = lerp(0,   0,   s);
-    } else {
-        double s = (t - 0.8575) / 0.1425;
-        r = lerp(0,  0, s);     g = lerp(2,  7, s);     b = lerp(0, 100, s);
-    }
-
-    return { static_cast<uint8_t>(r),
-             static_cast<uint8_t>(g),
-             static_cast<uint8_t>(b) };
-}
-
-// ---------------------------------------------------------------------------
-// TAREA A – Cálculo de un píxel del conjunto de Mandelbrot
-//           (función pura: sin estado global → segura para hilos)
-// ---------------------------------------------------------------------------
-static Pixel compute_mandelbrot(int px, int py) {
-    double cr = X_MIN + (X_MAX - X_MIN) * px / (WIDTH  - 1);
-    double ci = Y_MIN + (Y_MAX - Y_MIN) * py / (HEIGHT - 1);
-
-    double zr = 0.0, zi = 0.0;
-    int    iter = 0;
-
-    while (iter < MAX_ITER && (zr * zr + zi * zi) <= 4.0) {
-        double tmp = zr * zr - zi * zi + cr;
-        zi = 2.0 * zr * zi + ci;
-        zr = tmp;
-        ++iter;
-    }
-
-    return smooth_color(iter, zr, zi);
-}
+static const Mandelbrot mb(WIDTH, HEIGHT, MAX_ITER);
 
 // ---------------------------------------------------------------------------
 // TAREA A – Auxiliar: genera el fractal con schedule(static) para referencia
 // ---------------------------------------------------------------------------
 static void generate_mandelbrot_static(std::vector<Pixel>& img) {
-    #pragma omp parallel for schedule(static) default(none) shared(img)
+    #pragma omp parallel for schedule(static) default(none) shared(img, mb)
     for (int y = 0; y < HEIGHT; ++y)
         for (int x = 0; x < WIDTH; ++x)
-            img[y * WIDTH + x] = compute_mandelbrot(x, y);
-}
-
-// ---------------------------------------------------------------------------
-// TAREA B – Generación del kernel Gaussiano 2D
-// ---------------------------------------------------------------------------
-static std::vector<double> make_gaussian_kernel(int radius) {
-    const double sigma = radius / 3.0;
-    const int    size  = 2 * radius + 1;
-    std::vector<double> k(size * size);
-    double sum = 0.0;
-
-    for (int y = -radius; y <= radius; ++y)
-        for (int x = -radius; x <= radius; ++x) {
-            double v = std::exp(-(x * x + y * y) / (2.0 * sigma * sigma));
-            k[(y + radius) * size + (x + radius)] = v;
-            sum += v;
-        }
-
-    for (auto& v : k) v /= sum;
-    return k;
+            img[y * WIDTH + x] = mb.compute(x, y);
 }
 
 // ---------------------------------------------------------------------------
@@ -189,20 +105,6 @@ static void gaussian_blur_omp(const std::vector<Pixel>& src,
 }
 
 // ---------------------------------------------------------------------------
-// Guardar en formato PPM binario (P6)
-// ---------------------------------------------------------------------------
-static void save_ppm(const std::string& path,
-                     const std::vector<Pixel>& img)
-{
-    std::ofstream f(path, std::ios::binary);
-    if (!f) { std::cerr << "No se pudo abrir: " << path << "\n"; return; }
-    f << "P6\n" << WIDTH << " " << HEIGHT << "\n255\n";
-    f.write(reinterpret_cast<const char*>(img.data()),
-            static_cast<std::streamsize>(img.size() * sizeof(Pixel)));
-    std::cout << "  Guardado: " << path << "\n";
-}
-
-// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 int main() {
@@ -225,15 +127,6 @@ int main() {
 
     // ------------------------------------------------------------------
     // TAREA A  –  Comparación de planificadores
-    //
-    //  Paso 1: schedule(static) → referencia / línea base.
-    //  Paso 2: schedule(dynamic, 8) → planificador óptimo empírico.
-    //
-    //  El fractal tiene carga DESBALANCEADA: píxeles dentro del conjunto
-    //  ejecutan MAX_ITER iteraciones; los exteriores escapan pronto.
-    //  dynamic con chunk=8 reasigna filas conforme los hilos terminan,
-    //  compensando el desbalance.  chunk=8 minimiza el overhead de
-    //  sincronización frente a chunks menores sin perder balanceo.
     // ------------------------------------------------------------------
     std::cout << "[Tarea A] Paso 1: schedule(static) — referencia...\n";
     auto ta_s0 = Clock::now();
@@ -244,34 +137,29 @@ int main() {
     std::cout << "[Tarea A] Paso 2: schedule(dynamic, 8) — óptimo...\n";
     auto ta0 = Clock::now();
 
-    #pragma omp parallel for schedule(dynamic, 8) default(none) shared(image)
+    #pragma omp parallel for schedule(dynamic, 8) default(none) shared(image, mb)
     for (int y = 0; y < HEIGHT; ++y)
         for (int x = 0; x < WIDTH; ++x)
-            image[y * WIDTH + x] = compute_mandelbrot(x, y);
+            image[y * WIDTH + x] = mb.compute(x, y);
 
     double ta = Sec(Clock::now() - ta0).count();
     std::cout << "  Tiempo dynamic,8 : " << ta << " s"
               << "  (speedup " << std::fixed << std::setprecision(3)
               << (ta_static / ta) << "x vs static)\n";
-    save_ppm("output/mandelbrot_8k.ppm", image);
+    ImageIO::save_ppm("output/mandelbrot_8k.ppm", image, WIDTH, HEIGHT);
 
     // ------------------------------------------------------------------
     // TAREA B  –  schedule(static)
-    //
-    //  El filtro Gaussiano tiene carga UNIFORME:
-    //  cada fila hace exactamente HEIGHT × (2r+1)² operaciones.
-    //  static distribuye filas en bloques iguales sin overhead de
-    //  reasignación, lo cual es óptimo para cargas balanceadas.
     // ------------------------------------------------------------------
     std::cout << "\n[Tarea B] Aplicando Gaussiano  (schedule=static)...\n";
-    auto kernel = make_gaussian_kernel(GAUSS_RADIUS);
+    auto kernel = Mandelbrot::make_gaussian_kernel(GAUSS_RADIUS);
 
     auto tb0 = Clock::now();
     gaussian_blur_omp(image, blurred, kernel, GAUSS_RADIUS);
     double tb = Sec(Clock::now() - tb0).count();
 
     std::cout << "  Tiempo: " << tb << " s\n";
-    save_ppm("output/mandelbrot_8k_blurred.ppm", blurred);
+    ImageIO::save_ppm("output/mandelbrot_8k_blurred.ppm", blurred, WIDTH, HEIGHT);
 
     // ------------------------------------------------------------------
     // Resumen
@@ -288,3 +176,4 @@ int main() {
 
     return 0;
 }
+
