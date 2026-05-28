@@ -43,19 +43,16 @@
 #include "Mandelbrot.hpp"
 #include "ImageIO.hpp"
 
-// ---------------------------------------------------------------------------
-// Parámetros globales  (idénticos a la versión secuencial)
-// ---------------------------------------------------------------------------
+using Clock = std::chrono::high_resolution_clock;
+using Sec   = std::chrono::duration<double>;
+
 static constexpr int    WIDTH        = 7680;
 static constexpr int    HEIGHT       = 4320;
 static constexpr int    MAX_ITER     = 1024;
-static constexpr int    GAUSS_RADIUS = 20;   // núcleo 41×41
+static constexpr int    GAUSS_RADIUS = 20;
 
 static const Mandelbrot mb(WIDTH, HEIGHT, MAX_ITER);
 
-// ---------------------------------------------------------------------------
-// TAREA A – Auxiliar: genera el fractal con schedule(static) para referencia
-// ---------------------------------------------------------------------------
 static void generate_mandelbrot_static(std::vector<Pixel>& img) {
     #pragma omp parallel for schedule(static) default(none) shared(img, mb)
     for (int y = 0; y < HEIGHT; ++y)
@@ -63,13 +60,6 @@ static void generate_mandelbrot_static(std::vector<Pixel>& img) {
             img[y * WIDTH + x] = mb.compute(x, y);
 }
 
-// ---------------------------------------------------------------------------
-// TAREA B – Convolución Gaussiana 2D  *** PARALELIZADA ***
-//
-//  Cada hilo trabaja sobre filas independientes → no hay condiciones de carrera.
-//  El kernel y src son de solo lectura → no requieren sincronización.
-//  schedule(static) es óptimo porque la carga por fila es uniforme.
-// ---------------------------------------------------------------------------
 static void gaussian_blur_omp(const std::vector<Pixel>& src,
                                std::vector<Pixel>&       dst,
                                const std::vector<double>& kernel,
@@ -82,7 +72,6 @@ static void gaussian_blur_omp(const std::vector<Pixel>& src,
     for (int y = 0; y < HEIGHT; ++y) {
         for (int x = 0; x < WIDTH; ++x) {
             double r = 0.0, g = 0.0, b = 0.0;
-
             for (int ky = -radius; ky <= radius; ++ky) {
                 int ny = std::clamp(y + ky, 0, HEIGHT - 1);
                 for (int kx = -radius; kx <= radius; ++kx) {
@@ -94,7 +83,6 @@ static void gaussian_blur_omp(const std::vector<Pixel>& src,
                     b += w * p.b;
                 }
             }
-
             dst[y * WIDTH + x] = {
                 static_cast<uint8_t>(std::clamp(r, 0.0, 255.0)),
                 static_cast<uint8_t>(std::clamp(g, 0.0, 255.0)),
@@ -104,13 +92,7 @@ static void gaussian_blur_omp(const std::vector<Pixel>& src,
     }
 }
 
-// ---------------------------------------------------------------------------
-// main
-// ---------------------------------------------------------------------------
 int main() {
-    using Clock = std::chrono::high_resolution_clock;
-    using Sec   = std::chrono::duration<double>;
-
     const int nthreads = omp_get_max_threads();
 
     std::cout << "============================================\n"
